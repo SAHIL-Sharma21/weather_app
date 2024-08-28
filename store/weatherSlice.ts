@@ -1,46 +1,52 @@
-import {createSlice, createAsyncThunk} from '@reduxjs/toolkit'
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+
+interface FetchWeatherDataError {
+    error: string;
+}
 
 
 export interface Weather {
     searchQuery: string;
     suggestions: string[];
-    weatherData: any;
+    weatherData: any | null;
     error: string | null;
     loading: boolean;
 }
 
-const initialState:Weather = {
+const initialState: Weather = {
     loading: false,
-    error: null,
+    error:null,
     searchQuery: "",
     weatherData: null,
-    suggestions: [], 
-}
+    suggestions: [],
+};
 
-
-//fetch weather data
-export const fetchWeatherData = createAsyncThunk(
+// Fetch weather data
+export const fetchWeatherData = createAsyncThunk<
+    any,  
+    string, 
+    {
+        rejectValue: FetchWeatherDataError 
+    }
+>(
     'weather/fetchWeatherData',
-    async (locality: string) => {
-        try {            
-            const queryString = new URLSearchParams({locality_id: locality}).toString();
-
-            const response = await fetch(`/get_locality_weather_data?${queryString}`, {
-                headers: {
-                    'X-Zomato-Api-Key': process.env.WEATHER_UNION_API_KEY!
-                }
-            });
-
-            if(!response.ok){
-                throw new Error("Error fetching the data from weatherunion.com");
+    async (placeName: string, thunkAPI) => {
+        try {
+            // Fetch weather data directly
+            const weatherResponse = await fetch(`/api/weatherapi?placeName=${encodeURIComponent(placeName)}`);
+            if (!weatherResponse.ok) {
+                const error = await weatherResponse.json();
+                return thunkAPI.rejectWithValue({ error: error.message || "Failed to fetch weather data" });
             }
-            const data = await response.json();
-            console.log("Data fetched from weatherunion.com", data);
+
+            const data = await weatherResponse.json();
+            console.log("Data fetched from API", data);
 
             return data;
+
         } catch (error: any) {
-            console.log("Error fetching the data from weatherunion.com", error?.message);
-            throw error;
+            console.log("Error fetching the data", error?.message);
+            return thunkAPI.rejectWithValue({ error: error?.message || "An error occurred" });
         }
     }
 );
@@ -67,12 +73,11 @@ const weatherSlice = createSlice({
                 state.loading = false;
             })
             .addCase(fetchWeatherData.rejected, (state, action) => {
-                state.error = action.error?.message || "Error fetching the data from weatherunion.com";
+                state.error = action.payload?.error || "Error fetching the data from weatherunion.com";
                 state.loading = false;
-            })
+            });
     }
 });
 
-
-export const {setSearchQuery, setSuggestions} = weatherSlice.actions;
+export const { setSearchQuery, setSuggestions } = weatherSlice.actions;
 export default weatherSlice.reducer;
